@@ -6,6 +6,7 @@ import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
+import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -21,16 +22,19 @@ import app.morphe.extension.shared.Logger;
 public class SkipArtistVocalsPatch {
 
     private static final String ARTIST_NAME = "sexmane";
+    private static final long POLL_INTERVAL_MS = 500;
     private static final Handler handler = new Handler(Looper.getMainLooper());
     private static volatile boolean skipPending;
+    private static volatile boolean initialized;
 
     /**
      * Injection point. Called from MusicActivity.onCreate().
      */
     public static void init(Activity activity) {
-        if (!Settings.SKIP_ARTIST_VOCALS.get()) {
+        if (!Settings.SKIP_ARTIST_VOCALS.get() || initialized) {
             return;
         }
+        initialized = true;
         registerSessionListener(activity);
     }
 
@@ -42,15 +46,12 @@ public class SkipArtistVocalsPatch {
                 return;
             }
 
-            // getActiveSessions(null) works within the same app process for the
-            // app's own sessions without requiring notification listener access.
             try {
                 List<MediaController> controllers = manager.getActiveSessions(null);
                 for (MediaController controller : controllers) {
                     attachCallback(controller, context);
                 }
             } catch (SecurityException ignored) {
-                // Expected if no notification listener permission.
             }
 
             try {
@@ -61,7 +62,6 @@ public class SkipArtistVocalsPatch {
                     }
                 }, null);
             } catch (SecurityException ignored) {
-                // Fall back: poll metadata on a timer.
                 startPollingFallback(manager, context);
             }
         } catch (Exception ex) {
@@ -69,10 +69,6 @@ public class SkipArtistVocalsPatch {
         }
     }
 
-    /**
-     * Fallback polling mechanism if MediaSessionManager listener registration
-     * fails due to missing permissions.
-     */
     private static void startPollingFallback(MediaSessionManager manager, Context context) {
         handler.postDelayed(new Runnable() {
             @Override
@@ -84,10 +80,10 @@ public class SkipArtistVocalsPatch {
                 try {
                     List<MediaController> controllers = manager.getActiveSessions(null);
                     for (MediaController controller : controllers) {
-                        checkAndSkip(controller.getMetadata(), context);
+                        checkAndSkipTrack(controller.getMetadata(), context);
+                        checkAndSkipSegments(controller);
                     }
                 } catch (SecurityException ignored) {
-                    // Cannot access sessions at all.
                 }
                 handler.postDelayed(this, 2000);
             }
@@ -95,44 +91,106 @@ public class SkipArtistVocalsPatch {
     }
 
     private static void attachCallback(MediaController controller, Context context) {
+        // Start the segment polling loop for this controller.
+        startSegmentPoller(controller, context);
+
         controller.registerCallback(new MediaController.Callback() {
             @Override
             public void onMetadataChanged(MediaMetadata metadata) {
                 if (!Settings.SKIP_ARTIST_VOCALS.get()) {
                     return;
                 }
-                checkAndSkip(metadata, context);
+                checkAndSkipTrack(metadata, context);
             }
         }, handler);
 
-        // Check the current metadata immediately.
-        checkAndSkip(controller.getMetadata(), context);
+        checkAndSkipTrack(controller.getMetadata(), context);
     }
 
-    private static void checkAndSkip(MediaMetadata metadata, Context context) {
+    /**
+     * Polls the playback position and seeks past any vocal segments
+     * defined in {@link ArtistVocalSegments}.
+     */
+    private static void startSegmentPoller(MediaController controller, Context context) {
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!Settings.SKIP_ARTIST_VOCALS.get()) {
+                    handler.postDelayed(this, POLL_INTERVAL_MS);
+                    return;
+                }
+                checkAndSkipSegments(controller);
+                handler.postDelayed(this, POLL_INTERVAL_MS);
+            }
+        }, POLL_INTERVAL_MS);
+    }
+
+    private static void checkAndSkipSegments(MediaController controller) {
+        try {
+            MediaMetadata metadata = controller.getMetadata();
+            PlaybackState state = controller.getPlaybackState();
+            if (metadata == null || state == null) {
+                return;
+            }
+            if (state.getState() != PlaybackState.STATE_PLAYING) {
+                return;
+            }
+
+            String mediaId = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+            if (mediaId == null) {
+                // Fall back to title + artist as a compound key.
+                String title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE);
+                String artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST);
+                if (title != null && artist != null) {
+                    mediaId = artist.toLowerCase(Locale.ROOT) + "|" + title.toLowerCase(Locale.ROOT);
+                }
+            }
+            if (mediaId == null) {
+                return;
+            }
+
+            long[][] segments = ArtistVocalSegments.getSegments(mediaId);
+            if (segments == null) {
+                return;
+            }
+
+            long position = state.getPosition();
+            for (long[] segment : segments) {
+                long start = segment[0];
+                long end = segment[1];
+                if (position >= start && position < end) {
+                    Logger.printInfo(() -> "Seeking past vocal segment at " + position
+                            + "ms -> " + end + "ms");
+                    controller.getTransportControls().seekTo(end);
+                    return;
+                }
+            }
+        } catch (Exception ex) {
+            Logger.printException(() -> "Segment skip check failed", ex);
+        }
+    }
+
+    // region Full-track skip logic
+
+    private static void checkAndSkipTrack(MediaMetadata metadata, Context context) {
         if (metadata == null) {
             return;
         }
-        if (shouldSkip(metadata)) {
+        if (shouldSkipTrack(metadata)) {
             skipToNext(context);
         }
     }
 
-    private static boolean shouldSkip(MediaMetadata metadata) {
-        // Check primary artist field.
+    private static boolean shouldSkipTrack(MediaMetadata metadata) {
         if (containsArtist(metadata.getString(MediaMetadata.METADATA_KEY_ARTIST))) {
             return true;
         }
-        // Check album artist (covers cases where sexmane is the album artist).
         if (containsArtist(metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST))) {
             return true;
         }
-        // Check display subtitle — YouTube Music uses this for "Artist • Album" text.
-        // Catches featured credits like "Artist feat. sexmane".
         if (containsArtist(metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE))) {
             return true;
         }
-        // Check display description for any remaining credits.
         return containsArtist(metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_DESCRIPTION));
     }
 
@@ -146,7 +204,6 @@ public class SkipArtistVocalsPatch {
         }
         skipPending = true;
 
-        // Small delay to let the player fully initialize the track before skipping.
         handler.postDelayed(() -> {
             try {
                 AudioManager audioManager = (AudioManager)
@@ -169,4 +226,6 @@ public class SkipArtistVocalsPatch {
             }
         }, 400);
     }
+
+    // endregion
 }
