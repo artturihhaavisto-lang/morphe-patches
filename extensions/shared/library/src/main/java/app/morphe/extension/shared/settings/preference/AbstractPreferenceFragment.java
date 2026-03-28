@@ -41,6 +41,7 @@ import android.widget.ListView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -114,7 +115,16 @@ public abstract class AbstractPreferenceFragment extends PreferenceFragment {
 
     private static final int READ_REQUEST_CODE = 42;
     private static final int WRITE_REQUEST_CODE = 43;
+    private static final int ADDON_IMPORT_REQUEST_CODE = 44;
     private String existingSettings = "";
+
+    /**
+     * Called after a successful addon module import to rebuild the module list.
+     * Set by {@link app.morphe.extension.shared.addons.AddonModulePreferenceGroup}
+     * before launching the file picker and cleared immediately after use.
+     */
+    @Nullable
+    public static Runnable pendingAddonImportCallback;
 
     private EditText currentImportExportEditText;
 
@@ -535,6 +545,26 @@ public abstract class AbstractPreferenceFragment extends PreferenceFragment {
         }
     }
 
+    /**
+     * Launches the system file picker so the user can select an addon module file
+     * (.dex, .jar, or .apk).  The result is handled in {@link #onActivityResult}.
+     *
+     * @param onImportComplete Runnable called on the main thread after the file has been
+     *                         copied into the addons directory.  Typically used to refresh
+     *                         the addon preference list.
+     */
+    public void importAddonModule(@NonNull Runnable onImportComplete) {
+        try {
+            pendingAddonImportCallback = onImportComplete;
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*");
+            startActivityForResult(intent, ADDON_IMPORT_REQUEST_CODE);
+        } catch (Exception ex) {
+            Logger.printException(() -> "importAddonModule failure", ex);
+        }
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         return new DebouncedListView(getActivity());
@@ -547,6 +577,28 @@ public abstract class AbstractPreferenceFragment extends PreferenceFragment {
             exportTextToFile(data.getData());
         } else if (requestCode == READ_REQUEST_CODE && resultCode == android.app.Activity.RESULT_OK && data != null) {
             importTextFromFile(data.getData());
+        } else if (requestCode == ADDON_IMPORT_REQUEST_CODE && resultCode == android.app.Activity.RESULT_OK && data != null) {
+            importAddonModuleFromUri(data.getData());
+        }
+    }
+
+    private void importAddonModuleFromUri(android.net.Uri uri) {
+        try {
+            app.morphe.extension.shared.addons.AddonModuleManager manager =
+                    app.morphe.extension.shared.addons.AddonModuleManager.getInstance();
+            File imported = manager.importModuleFromUri(uri);
+            if (imported != null) {
+                Utils.showToastShort("Module \"" + imported.getName() + "\" imported — tap Reload modules to activate it");
+                Runnable callback = pendingAddonImportCallback;
+                if (callback != null) {
+                    pendingAddonImportCallback = null;
+                    Utils.runOnMainThread(callback);
+                }
+            } else {
+                Utils.showToastShort("Failed to import module");
+            }
+        } catch (Exception e) {
+            Logger.printException(() -> "importAddonModuleFromUri failure", e);
         }
     }
 

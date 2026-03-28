@@ -22,6 +22,7 @@ import java.util.Map;
 
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
+import app.morphe.extension.shared.settings.preference.AbstractPreferenceFragment;
 
 /**
  * Preference group that displays loaded addon modules in the settings UI.
@@ -82,6 +83,26 @@ public class AddonModulePreferenceGroup extends PreferenceGroup {
         dirInfo.setSelectable(false);
         addPreference(dirInfo);
 
+        // Import button — opens the system file picker to copy a file into the addons directory.
+        Preference importPref = new Preference(context);
+        importPref.setTitle("Import module");
+        importPref.setSummary("Pick a .dex, .jar, or .apk file from your device");
+        importPref.setOnPreferenceClickListener(pref -> {
+            AbstractPreferenceFragment fragment = AbstractPreferenceFragment.instance;
+            if (fragment != null) {
+                fragment.importAddonModule(() -> {
+                    // After the file is copied, reload the module list.
+                    preferencesInitialized = false;
+                    removeAll();
+                    buildPreferences();
+                });
+            } else {
+                Utils.showToastShort("Settings not ready — please try again");
+            }
+            return true;
+        });
+        addPreference(importPref);
+
         // Refresh button.
         Preference refresh = new Preference(context);
         refresh.setTitle("Reload modules");
@@ -100,7 +121,7 @@ public class AddonModulePreferenceGroup extends PreferenceGroup {
         if (loadedModules.isEmpty()) {
             Preference empty = new Preference(context);
             empty.setTitle("No modules loaded");
-            empty.setSummary("Place .dex or .jar files in the addons directory above");
+            empty.setSummary("Tap \"Import module\" above, or place files in the addons directory");
             empty.setSelectable(false);
             addPreference(empty);
             return;

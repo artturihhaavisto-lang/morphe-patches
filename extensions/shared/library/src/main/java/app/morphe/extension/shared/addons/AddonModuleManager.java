@@ -3,11 +3,17 @@ package app.morphe.extension.shared.addons;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -113,6 +119,61 @@ public final class AddonModuleManager {
     @NonNull
     public File getAddonsDirectory() {
         return addonsDir;
+    }
+
+    /**
+     * Copies a module file selected via the system file picker into the addons directory.
+     *
+     * <p>The destination file name is taken from the Uri's display name.  Call
+     * {@link #discoverAndLoad()} (or tap Reload modules in settings) to make the new module
+     * appear after a successful import.</p>
+     *
+     * @param uri Content Uri returned by {@code Intent.ACTION_OPEN_DOCUMENT}.
+     * @return The copied file, or {@code null} if the copy failed.
+     */
+    @Nullable
+    public File importModuleFromUri(@NonNull Uri uri) {
+        try {
+            // Resolve the display name from the content provider.
+            String fileName = null;
+            try (Cursor cursor = context.getContentResolver().query(
+                    uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (col >= 0) fileName = cursor.getString(col);
+                }
+            }
+            if (fileName == null) {
+                String path = uri.getPath();
+                fileName = path != null
+                        ? path.substring(path.lastIndexOf('/') + 1)
+                        : "addon_" + System.currentTimeMillis() + ".dex";
+            }
+
+            if (!addonsDir.exists()) {
+                addonsDir.mkdirs();
+            }
+
+            File dest = new File(addonsDir, fileName);
+            try (InputStream in = context.getContentResolver().openInputStream(uri);
+                 OutputStream out = new FileOutputStream(dest)) {
+                if (in == null) {
+                    Logger.printException(() -> "Could not open input stream for Uri: " + uri);
+                    return null;
+                }
+                byte[] buf = new byte[8192];
+                int read;
+                while ((read = in.read(buf)) != -1) {
+                    out.write(buf, 0, read);
+                }
+            }
+
+            Logger.printInfo(() -> "Imported addon file: " + dest.getName());
+            return dest;
+        } catch (Exception e) {
+            Logger.printException(() -> "Failed to import addon module", e);
+            return null;
+        }
     }
 
     /**
