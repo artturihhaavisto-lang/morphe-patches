@@ -134,4 +134,9 @@ Second \"item\" text"</string>
     <string name="morphe_music_hide_upgrade_button_title">Hide upgrade button</string>
     <string name="morphe_music_hide_upgrade_button_summary_on">Button is hidden</string>
     <string name="morphe_music_hide_upgrade_button_summary_off">Button is shown</string>
+
+    <!-- interaction.skipartist.skipArtistVocalsPatch -->
+    <string name="morphe_music_skip_artist_vocals_title">Skip sexmane vocals</string>
+    <string name="morphe_music_skip_artist_vocals_summary_on">Songs by sexmane and songs featuring sexmane are automatically skipped</string>
+    <string name="morphe_music_skip_artist_vocals_summary_off">Songs by sexmane are not skipped</string>
 </resources>
