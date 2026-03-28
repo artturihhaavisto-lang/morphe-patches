@@ -1,0 +1,29 @@
+{
+  "name": "Skip Artist Vocals",
+  "description": "Automatically skips songs by sexmane and seeks past vocal segments where sexmane is featured. Full-track skipping uses MediaSession metadata; segment skipping uses a SponsorBlock-style timestamp registry.",
+  "version": "1.0.0",
+  "author": "morphe-patches",
+  "targetApp": "com.google.android.apps.youtube.music",
+  "compatibleWith": [
+    "7.29.52",
+    "8.10.52",
+    "8.40.54",
+    "8.44.54",
+    "8.50.51",
+    "9.10.52",
+    "9.11.54"
+  ],
+  "patch": "patch/SkipArtistVocalsPatch.kt",
+  "extension": [
+    "extension/SkipArtistVocalsPatch.java",
+    "extension/ArtistVocalSegments.java"
+  ],
+  "settings": {
+    "key": "morphe_music_skip_artist_vocals",
+    "type": "switch",
+    "default": false,
+    "title": "Skip sexmane vocals",
+    "summaryOn": "Songs by sexmane and songs featuring sexmane are automatically skipped",
+    "summaryOff": "Songs by sexmane are not skipped"
+  }
+}
