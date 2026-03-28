@@ -151,4 +151,7 @@ If battery optimizations are not changed then you may experience:
 • App may randomly close
 • Notifications may not work
 • Background playback may not work"</string>
+
+    <!-- all.misc.addons.customModulesPatch -->
+    <string name="morphe_settings_screen_addons_title">Addon modules</string>
 </resources>
