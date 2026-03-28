@@ -1,8 +1,51 @@
-# Creating Addon Modules
+# Addon Modules
 
 Addon modules let you extend patched apps (YouTube, YouTube Music) with custom functionality at runtime — without modifying the core patches. Modules are loaded from DEX files placed on the device and managed through the Morphe settings UI.
 
-## Quick Start
+## Using a module (end users)
+
+If someone has shared a ready-to-use `.dex`, `.jar`, or `.apk` addon file, follow these steps to install it.
+
+### 1. Find the addons directory
+
+Open the patched app, go to **Morphe Settings → Misc → Addon modules**, and note the directory path shown on screen. It will look like:
+
+```
+/Android/data/<package-name>/files/addons/
+```
+
+Where `<package-name>` is:
+- YouTube: `com.google.android.youtube` (or the patched package name)
+- YouTube Music: `com.google.android.apps.youtube.music` (or the patched package name)
+
+> On Android 11 and later, this path is only accessible via a file manager that has the **All files access** permission (e.g. the built-in Files app, or a third-party manager you have granted the permission), or via ADB:
+> ```
+> adb push my-addon.dex /sdcard/Android/data/<package-name>/files/addons/
+> ```
+
+### 2. Copy the addon file into the directory
+
+Place the `.dex` (or `.jar`/`.apk`) file directly inside the `addons/` folder. Do **not** create sub-folders.
+
+### 3. Enable the module in settings
+
+1. Open the patched app.
+2. Go to **Morphe Settings → Misc → Addon modules**.
+3. Tap **Reload modules** — your new module should appear in the list.
+4. Toggle the switch next to the module name to enable it.
+5. Optionally tap **Configure** to set any options the module supports.
+
+The module is now active. Enabled modules and their configuration are saved automatically and restored on every app launch.
+
+### Removing a module
+
+Disable the module in settings first (to let it clean up), then delete the file from the `addons/` directory and tap **Reload modules**.
+
+---
+
+## Creating a module (developers)
+
+### Quick Start
 
 ### 1. Create your module class
 
@@ -102,28 +145,9 @@ dependencies {
 
 Then grab the DEX from `build/intermediates/dex/` after building.
 
-### 3. Install the module
+### 3. Install and enable the module
 
-Copy the DEX file to the addons directory on your device:
-
-```
-/Android/data/<package-name>/files/addons/
-```
-
-Where `<package-name>` is:
-- YouTube: `com.google.android.youtube` (or the patched package name)
-- YouTube Music: `com.google.android.apps.youtube.music` (or the patched package name)
-
-The exact path is displayed in the Morphe settings under **Misc > Addon modules**.
-
-### 4. Enable the module
-
-1. Open the patched app
-2. Go to **Morphe Settings > Misc**
-3. Scroll to the **Addon modules** section
-4. Tap **Reload modules** if your module doesn't appear
-5. Toggle the switch to enable it
-6. Tap **Configure** to set key=value options
+Follow the [end-user install steps](#using-a-module-end-users) above — copy the DEX file to the `addons/` directory and tap **Reload modules** in settings.
 
 ## AddonModule Interface
 
