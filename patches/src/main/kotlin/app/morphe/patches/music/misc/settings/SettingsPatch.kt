@@ -2,6 +2,7 @@ package app.morphe.patches.music.misc.settings
 
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
+import app.morphe.patches.all.misc.addons.addonModulesPreferenceCategory
 import app.morphe.patches.all.misc.packagename.setOrGetFallbackPackageName
 import app.morphe.patches.all.misc.resources.addAppResources
 import app.morphe.patches.all.misc.resources.addResourcesPatch
@@ -117,6 +118,7 @@ val settingsPatch = bytecodePatch(
         )
 
         PreferenceScreen.MISC.addPreferences(
+            addonModulesPreferenceCategory(),
             TextPreference(
                 key = null,
                 titleKey = "morphe_pref_import_export_title",
