@@ -1,35 +1,70 @@
-# Skip Artist Vocals Plugin
+# Skip Artist Vocals — Addon Module
 
-Automatically skips songs by **sexmane** and seeks past vocal segments where sexmane is featured.
+Skips songs by blocked artists and seeks past their vocal segments in YouTube Music.
 
-## Features
+## Install
 
-- **Full-track skip** — Any song where sexmane is the artist or featured artist is skipped entirely.
-- **Segment skip** — SponsorBlock-style timestamp ranges let you skip just the parts of a song where sexmane sings, keeping the rest of the track.
+1. Build the module to a DEX (see below)
+2. Copy it to `/Android/data/<ytmusic-package>/files/addons/` on your device:
+   ```
+   app.morphe.addon.skipartist.SkipArtistVocalsModule.dex
+   ```
+3. Open YouTube Music → Morphe Settings → Misc → Addon modules
+4. Tap **Reload modules**, then enable **Skip Artist Vocals**
 
-## Adding vocal segments
+## Configure
 
-Open `extension/ArtistVocalSegments.java` and add entries to the `SEGMENTS` map:
+Tap **Configure** on the module in settings and enter key=value pairs:
 
-```java
-// Skip his verse from 1:02–1:47 and outro from 3:10–3:35
-SEGMENTS.put("VIDEO_ID_HERE", new long[][]{
-    {mins(1, 2), mins(1, 47)},
-    {mins(3, 10), mins(3, 35)},
-});
+```
+artists=sexmane
 ```
 
-Keys can be a YouTube video ID or a lowercase `"artist|title"` string.
+Multiple artists (pipe-separated):
+```
+artists=sexmane|other artist
+```
 
-## Installation
+### Vocal segment timestamps
 
-Upload this plugin through the Morphe app's plugin loader. The toggle appears under **Settings → Player → Skip sexmane vocals**.
+Skip specific timestamp ranges within a song (milliseconds):
 
-## Files
+```
+segments.VIDEO_ID_HERE=62000-107000,190000-215000
+segments.some artist|some song=30000-58000
+```
 
-| File | Purpose |
-|------|---------|
-| `plugin.json` | Plugin metadata and settings definition |
-| `patch/SkipArtistVocalsPatch.kt` | Bytecode patch — hooks MusicActivity.onCreate() |
-| `extension/SkipArtistVocalsPatch.java` | Runtime logic — metadata monitoring + skip |
-| `extension/ArtistVocalSegments.java` | Timestamp registry for segment skipping |
+- Key format: `segments.<video ID>` or `segments.<artist|title>` (lowercase)
+- Value format: `start-end` pairs separated by commas
+
+### Full example config
+
+```
+artists=sexmane
+segments.dQw4w9WgXcQ=62000-107000,190000-215000
+segments.other artist|collab track=30000-58000
+```
+
+## Build
+
+```bash
+# Compile against Android SDK + morphe shared addon interface
+javac -source 17 -target 17 \
+  -classpath "android.jar:morphe-extension-shared.jar" \
+  src/app/morphe/addon/skipartist/SkipArtistVocalsModule.java
+
+# Convert to DEX
+d8 --output . src/app/morphe/addon/skipartist/SkipArtistVocalsModule.class
+
+# Rename to match the fully qualified class name
+mv classes.dex app.morphe.addon.skipartist.SkipArtistVocalsModule.dex
+```
+
+## How it works
+
+- **Full-track skip**: Polls active MediaSessions every 500ms. If any metadata field
+  (artist, album artist, subtitle, description) contains a blocked artist name, dispatches
+  `KEYCODE_MEDIA_NEXT` to skip the track.
+
+- **Segment skip**: When the playback position enters a defined timestamp range,
+  calls `seekTo()` on the MediaController transport controls to jump past it.
